@@ -1,0 +1,19 @@
+name: Tests
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: build artifact
+        run: |
+          mkdir -p /tmp/content
+          echo 5 > /tmp/content/pr_number.txt
+          echo fork-run > "/tmp/content/fork$(echo INJECTED).txt"
+          echo marker > /tmp/content/forkINJECTED.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: content
+          path: /tmp/content
